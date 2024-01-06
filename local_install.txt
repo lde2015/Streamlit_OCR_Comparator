@@ -1,0 +1,59 @@
+#------------------------------------------------------------------------
+# Python environment
+#------------------------------------------------------------------------
+
+conda create -n ocr_comparator python=3.8
+conda activate ocr_comparator
+
+# Install EasyOCR
+pip install easyocr==1.7.1
+pip install opencv-python-headless==4.9.0.80
+
+# Check Pytorch version
+pip show torch
+# Version: 2.1.2
+
+# Install pytorch
+# cf. https://pytorch.org/
+# ( Windows - CPU only - with conda)
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
+# Install PPOCR
+pip install paddleocr==2.7.0.3
+pip install paddlepaddle==2.6.0
+
+# Install Tesseract
+pip install pytesseract==0.3.10
+
+# Install Streamlit
+pip install streamlit==1.17.0
+pip install streamlit_option_menu
+
+
+pip install mycolorpy==1.5.1
+pip install plotly-express==0.4.1
+pip install altair==4.0
+
+
+#------------------------------------------------------------------------
+# Get the project files from GitHub
+#------------------------------------------------------------------------
+
+repository : https://github.com/lde2015/Streamlit_OCR_Comparator/tree/main
+
+
+#------------------------------------------------------------------------
+# Set environment variable for Tesseract
+#------------------------------------------------------------------------
+
+# Set env variable TESSDATA_PREFIX = <your directory>\Streamlit_OCR_comparator\configs\tessdata-main
+# cf. https://stackoverflow.com/questions/63048908/how-do-i-install-a-new-language-pack-for-tesseract-on-windows
+
+
+#------------------------------------------------------------------------
+# Launch app
+#------------------------------------------------------------------------
+
+cd <your directory>\Streamlit_OCR_comparator
+conda activate ocr_comparator
+streamlit run Home.py
