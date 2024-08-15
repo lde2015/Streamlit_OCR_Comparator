@@ -43,14 +43,14 @@ class MultiPage:
                     background-color: var(--secondary-background-color);
                     background: var(--secondary-background-color);
                     width: 250px;
-                    padding: 0rem 0;
+                    padding: 0em;
                     box-shadow: -2rem 0px 2rem 2rem rgba(0,0,0,0.16);
                 }
                 section[aria-expanded="true"] > div:nth-of-type(2) {
                     display: none;
                 }
                 .main > div:first-of-type {
-                    padding: 1rem 0;
+                    padding: 0em 1em 1em 2em;
                 }
             </style>
         """, unsafe_allow_html=True)
