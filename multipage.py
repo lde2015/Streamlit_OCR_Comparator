@@ -9,7 +9,6 @@ Source: https://huggingface.co/spaces/deepset/wikipedia-assistant/tree/main
 import streamlit as st
 from streamlit_option_menu import option_menu
 
-
 # Define the multipage class to manage the multiple apps in our program
 class MultiPage:
     """Framework for combining multiple streamlit applications."""
@@ -42,7 +41,7 @@ class MultiPage:
                 section[data-testid="stSidebar"] > div:first-of-type {
                     background-color: var(--secondary-background-color);
                     background: var(--secondary-background-color);
-                    width: 250px;
+                    width: 300px;
                     padding: 0em;
                     box-shadow: -2rem 0px 2rem 2rem rgba(0,0,0,0.16);
                 }
@@ -50,7 +49,7 @@ class MultiPage:
                     display: none;
                 }
                 .main > div:first-of-type {
-                    padding: 0em 1em 1em 2em;
+                    padding: 1em 0em 1em 2em;
                 }
             </style>
         """, unsafe_allow_html=True)

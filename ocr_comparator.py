@@ -890,10 +890,10 @@ def app():
                         cols[ind_col].markdown(column_title, unsafe_allow_html=True)
                         if st.session_state.list_reco_status[ind] == 'OK':
                             cols[ind_col].image(list_reco_images[ind], \
-                                                width=column_width, use_column_width=True)
+                                                width=column_width, use_container_width=True)
                         else:
                             cols[ind_col].write(list_reco_status[ind], \
-                                                use_column_width=True)
+                                                use_container_width=True)
 
             st.markdown(' 💡 Bad font size? you can adjust it below and refresh:')
 
@@ -916,9 +916,9 @@ def app():
                 col.markdown(column_title, unsafe_allow_html=True)
                 if isinstance(list_images[ind_col+2], PIL.Image.Image):
                     col.image(list_images[ind_col+2], width=column_width[ind_col], \
-                              use_column_width=True)
+                              use_container_width=True)
                 else:
-                    col.write(list_images[ind_col+2], use_column_width=True)
+                    col.write(list_images[ind_col+2], use_container_width=True)
             st.session_state.columns_size = columns_size
             st.session_state.column_width = column_width
             st.session_state.columns_color = columns_color
@@ -1221,10 +1221,10 @@ def app():
                     col.markdown(column_title, unsafe_allow_html=True)
                     if isinstance(list_images[no_col+2], PIL.Image.Image):
                         col.image(list_images[no_col+2], width=st.session_state.column_width[no_col], \
-                                  use_column_width=True)
+                                  use_container_width=True)
                         list_ok_detect.append(reader_type_list[no_col])
                     else:
-                        col.write(list_images[no_col+2], use_column_width=True)
+                        col.write(list_images[no_col+2], use_container_width=True)
 
             st.subheader("Text recognition")
 

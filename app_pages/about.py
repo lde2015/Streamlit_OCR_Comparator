@@ -1,11 +1,19 @@
 import streamlit as st
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 def app():
     st.title("OCR solutions comparator")
 
     st.write("")
     st.write("")
     st.write("")
+
+
+    fb = st.feedback(options="thumbs")
+    st.write("FB : " + str(fb))
+
+
+
 
     st.markdown("#####  This app allows you to compare, from a given picture, the results of different solutions:")
     st.markdown("##### *EasyOcr, PaddleOCR, MMOCR, Tesseract*")

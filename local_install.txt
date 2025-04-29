@@ -13,10 +13,27 @@ pip install opencv-python-headless==4.9.0.80
 pip show torch
 # Version: 2.1.2
 
+
+
+How to verify the CUDA installation
+
+    Open a command prompt (on Windows) or a terminal (on Linux).
+    Type nvcc --version and press Enter.
+    If CUDA is installed correctly, you should see the version of the 
+    CUDA Toolkit that is installed, along with the version of the NVIDIA GPU driver.
+
+https://medium.com/@afierror14/how-to-install-cuda-11-8-cudnn-9-1-pytorch-on-windows-anaconda-bf6af1a16aa6
+
+
+
+
 # Install pytorch
 # cf. https://pytorch.org/
 # ( Windows - CPU only - with conda)
 conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
+
+
 
 # Install PPOCR
 pip install paddleocr==2.7.0.3

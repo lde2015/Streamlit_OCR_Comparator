@@ -1,5 +1,6 @@
 import streamlit as st
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 def app():
     st.image('ocr.png', width=900)
 
@@ -22,6 +23,6 @@ def app():
 
     st.markdown("👈 Select the **About** page from the sidebar for information on how the app works")
 
-    st.markdown("👈 or select the **Image check** page to prepare and enhance your image")
+    st.markdown("👈 or select the **Image processing** page to prepare and enhance your image")
 
     st.markdown("👈 or directly select the **OCR App** page")
