@@ -48,14 +48,14 @@ def initializations():
 
     out_dict_interpolation = {"INTER_LINEAR": cv2.INTER_LINEAR,
                               "INTER_NEAREST": cv2.INTER_NEAREST,
-                              "INTER_LINEAR_EXACT": cv2.INTER_LINEAR_EXACT,
+#                              "INTER_LINEAR_EXACT": cv2.INTER_LINEAR_EXACT,
                               "INTER_AREA": cv2.INTER_AREA,
                               "INTER_CUBIC": cv2.INTER_CUBIC,
                               "INTER_LANCZOS4": cv2.INTER_LANCZOS4,
-                              "INTER_NEAREST_EXACT": cv2.INTER_NEAREST_EXACT,
-                              "INTER_MAX": cv2.INTER_MAX,
-                              "WARP_FILL_OUTLIERS": cv2.WARP_FILL_OUTLIERS,
-                              "WARP_INVERSE_MAP": cv2.WARP_INVERSE_MAP,
+#                              "INTER_NEAREST_EXACT": cv2.INTER_NEAREST_EXACT,
+#                              "INTER_MAX": cv2.INTER_MAX,
+#                              "WARP_FILL_OUTLIERS": cv2.WARP_FILL_OUTLIERS,
+#                              "WARP_INVERSE_MAP": cv2.WARP_INVERSE_MAP,
                              }
 
     out_dict_thresholding_type = {"THRESH_BINARY": cv2.THRESH_BINARY,
@@ -85,6 +85,7 @@ def load_image(in_image_file):
     #    out_image_path = "img."+in_image_file.split('.')[-1]
     #else:
     #    out_image_path = "img."+in_image_file.name.split('.')[-1]
+    print("load image")
     if isinstance(in_image_file, str):
         out_image_path = "tmp_"+in_image_file
     else:
@@ -94,6 +95,46 @@ def load_image(in_image_file):
     # Read image
 #    out_image_orig = Image.open(out_image_path)
     out_image_cv2 = cv2.cvtColor(cv2.imread(out_image_path), cv2.COLOR_BGR2RGB)
+
+    st.session_state.resize = False
+    st.session_state.scaling_factor = None
+    st.session_state.interpolation = None
+    st.session_state.rotate = None
+    st.session_state.angle = None
+    st.session_state.convolution = None
+    st.session_state.text_convol = None
+    st.session_state.convol_kernel = None
+    st.session_state.averaging = None
+    st.session_state.averaging_kernel_size = None
+    st.session_state.gaussian_bluring = None
+    st.session_state.gb_kernel_size = None
+    st.session_state.sigmaX = None
+    st.session_state.sigmaY = None
+    st.session_state.median_bluring = None
+    st.session_state.mb_kernel_size = None
+    st.session_state.bilateral_filtering = None
+    st.session_state.d = None
+    st.session_state.sigma_color = None
+    st.session_state.sigma_space = None
+    st.session_state.erosion = None
+    st.session_state.erosion_kernel_size = None
+    st.session_state.nb_iter_erosion = None
+    st.session_state.dilation = None
+    st.session_state.dilation_kernel_size = None
+    st.session_state.nb_iter_dilation = None
+    st.session_state.binarization = None
+    st.session_state.bin_thresh = None
+    st.session_state.bin_thresh = None
+    st.session_state.bin_thresholding_type = None
+    st.session_state.bin_otsu = None
+    st.session_state.thresh_typ = None
+    st.session_state.adaptative_thresh = None
+    st.session_state.at_thresholding_type = None
+    st.session_state.at_max_value = None
+    st.session_state.at_adaptative_method = None
+    st.session_state.at_block_size = None
+    st.session_state.at_const = None
+
     return out_image_cv2, out_image_path
 ###
 def eval_expr(expr):
@@ -103,6 +144,7 @@ def eval_expr(expr):
     Returns:
        float: eval result
     """
+    result = 1.
     # Dictionnary of authorized operators
     operators = {
         ast.Add: operator.add,
@@ -123,8 +165,12 @@ def eval_expr(expr):
             return operators[type(node.op)](_eval(node.operand))
         else:
             raise TypeError(node)
-    parsed = ast.parse(expr, mode='eval')
-    return _eval(parsed.body)
+    try:
+        parsed = ast.parse(expr, mode='eval')
+        result = _eval(parsed.body)
+    except:
+        pass
+    return result
 ###
 def text_kernel_to_latex(text_eval):
     """Try to parse a kernel text description like: 1/6 * [[1,1],[1,1]]
@@ -135,14 +181,19 @@ def text_kernel_to_latex(text_eval):
        list: right part of input string after *
        string: latex expression corresponding to the text kernel input
     """
-    text_coeff = text_eval.split('*')[0].strip()
-    text_kernel = text_eval.split('*')[-1].strip()
+    list_eval = text_eval.split('*')
+    text_kernel = list_eval[-1].strip()
     list_kernel = ast.literal_eval(text_kernel)
     latex = "\\begin{bmatrix}\n"
     for row in list_kernel:
         latex += " & ".join(map(str, row)) + " \\\\\n"
     latex += "\\end{bmatrix}"
-    return text_coeff, list_kernel, text_coeff + ' ' + latex
+    text_coeff = 1.
+    latex_text = latex
+    if len(list_eval) > 1:
+        text_coeff = list_eval[0].strip()
+        latex_text = text_coeff + ' ' + latex
+    return text_coeff, list_kernel, latex_text
 ###
 def get_img_fig(img):
     """Plot image with matplotlib, in order to have image size
@@ -158,6 +209,9 @@ def get_img_fig(img):
         plt.imshow(img, cmap='gray')
     return fig
 
+@st.fragment
+def show_latex(latex_code):
+    st.latex(latex_code)
 ###################################################################################################
 ##   STREAMLIT APP
 ###################################################################################################
@@ -220,68 +274,187 @@ if image_file is not None:
         except Exception as e:
             st.exception(e)
 
-    img_wrk = img_first.copy()
-
+    # Processed image construction
     cnt_img_wrk = col1.container(height=500, border=False)
     img_processed = cnt_img_wrk.empty()
+
+    img_wrk = img_first.copy()
+
+    if st.session_state.resize:
+        try:
+            img_wrk = cv2.resize(img_wrk, None, fx=st.session_state.scaling_factor,
+                                 fy=st.session_state.scaling_factor,
+                                 interpolation=dict_interpolation[st.session_state.interpolation])
+            list_op.append("Resize - fx="+str(st.session_state.scaling_factor)+", fy="+
+                           str(st.session_state.scaling_factor)+", interpolation="+
+                           st.session_state.interpolation)
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.rotate:
+        try:
+            img_wrk = imutils.rotate(img_wrk, angle=st.session_state.angle)
+            list_op.append("Rotate - angle="+str(st.session_state.angle))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.convolution:
+        try:
+            img_wrk = cv2.filter2D(src=img_wrk, ddepth=-1, kernel=st.session_state.convol_kernel)
+            list_op.append("Filtering - Custom 2D Convolution - kernel="+ st.session_state.text_convol)
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.averaging:
+        try:
+            img_wrk = cv2.blur(src=img_wrk, ksize=st.session_state.averaging_kernel_size)
+            list_op.append("Filtering - Averaging - kernel_size="+
+                           str(st.session_state.averaging_kernel_size))
+        except Exception as e:
+            st.exception(e)
+
+    if  st.session_state.gaussian_bluring:
+        try:
+            img_wrk = cv2.GaussianBlur(src=img_wrk, ksize=st.session_state.gb_kernel_size, \
+                                    sigmaX=st.session_state.sigmaX, sigmaY=st.session_state.sigmaY)
+            list_op.append("Filtering - Gaussian Blurring - ksize="+ \
+                        str(st.session_state.gb_kernel_size)+", sigmaX="+
+                        str(st.session_state.sigmaX)+", sigmaY="+str(st.session_state.sigmaY))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.median_bluring:
+        try:
+            img_wrk = cv2.medianBlur(img_wrk, st.session_state.mb_kernel_size)
+            list_op.append("Filtering - Median Blurring - kernel_size="+ \
+                           str(st.session_state.mb_kernel_size))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.bilateral_filtering:
+        try:
+            img_wrk = cv2.bilateralFilter(img_wrk, st.session_state.d, st.session_state.sigma_color,
+                                         st.session_state.sigma_space)
+            list_op.append("Filtering - Bilateral Filtering - d="+ str(st.session_state.d)+
+                           ", sigma_color="+str(st.session_state.sigma_color)+ \
+                           ", sigma_space="+str(st.session_state.sigma_space))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.erosion:
+        try:
+            kernel = np.ones((st.session_state.erosion_kernel_size,
+                              st.session_state.erosion_kernel_size),
+                             np.uint8)
+            img_wrk = cv2.erode(img_wrk, kernel, iterations=st.session_state.nb_iter_erosion)
+            list_op.append("Erosion - kernel_size="+str(st.session_state.erosion_kernel_size)+ \
+                           ", iterations="+str(st.session_state.nb_iter_erosion))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.dilation:
+        try:
+            kernel = np.ones((st.session_state.dilation_kernel_size,
+                              st.session_state.dilation_kernel_size),
+                             np.uint8)
+            img_wrk = cv2.dilate(img_wrk, kernel, iterations=st.session_state.nb_iter_dilation)
+            list_op.append("Dilation - kernel_size="+str(st.session_state.dilation_kernel_size )+ \
+                           ", iterations="+str(st.session_state.nb_iter_dilation))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.binarization:
+        try:
+            ret, img_wrk = cv2.threshold(img_wrk, st.session_state.bin_thresh,
+                                         st.session_state.bin_value,
+                                         st.session_state.thresh_typ)
+            list_op.append("Thresholding - thresh="+str(st.session_state.bin_thresh)+ \
+                           ", maxval="+str(st.session_state.bin_value)+", type="+ \
+                           st.session_state.bin_thresholding_type+", otsu="+ \
+                           str(st.session_state.bin_otsu))
+        except Exception as e:
+            st.exception(e)
+
+    if st.session_state.adaptative_thresh:
+        try:
+            img_wrk = cv2.adaptiveThreshold(img_wrk, st.session_state.at_max_value,
+                                dict_adaptative_method[st.session_state.at_adaptative_method],
+                                dict_thresholding_type[st.session_state.at_thresholding_type],
+                                st.session_state.at_block_size, st.session_state.at_const)
+            list_op.append("Adaptative thresholding - maxValue="+
+                           str(st.session_state.at_max_value)+", adaptiveMethod="+
+                           st.session_state.at_adaptative_method+", thresholdType"+
+                           ", thresholding_type="+st.session_state.at_thresholding_type+
+                           ", blockSize="+str(st.session_state.at_block_size)+", C="+
+                           str(st.session_state.at_const))
+        except Exception as e:
+            st.exception(e)
+
+    # Show image
     img_processed.pyplot(get_img_fig(img_wrk))
 
+    # Process
     col2.markdown('#### :orange[Check & enhance]')
 
     with col2.expander(":blue[Image processing]", expanded=False):
         tab1, tab2, tab3, tab4, tab5 = \
                 st.tabs(["Resize", "Rotate", "Filtering",
                           "Morphologie", "Thresholding"])
-
         with tab1: # Resize
-            scaling_factor = st.slider("Scaling factor :", 0.1, 10., 1., 0.1)
-            cols_tab1 = st.columns([0.1, 0.9], gap="medium", vertical_alignment="center")
-            cols_tab1[0].markdown("💬", help="""An interpolation function’s goal is
-    to examine neighborhoods of pixels and use these neighborhoods to optically increase or decrease
-    the size of the image without introducing distortions (or at least as few distortions
-    as possible).\n
-    ```cv2.INTER_LINEAR``` This option uses the bilinear interpolation algorithm. Unlike INTER_NEAREST,
-    this does the interpolation in two dimensions and predicts the function used to calculate the color
-    of a pixel. This algorithm is effective in handling visual distortions while zooming or
-    enlarging an image.\n
-    ```cv2.INTER_NEAREST``` This option uses the nearest neighbor interpolation algorithm. It retains
-    the sharpness of the edges though the overall image may be blurred.\n
-    ```cv2.INTER_LINEAR_EXACT```is a modification of ```INTER_LINEAR``` and both uses bilinear
-    interpolation algorithm. The only difference is that the calculations in ```INTER_LINEAR_EXACT```
-    are accurate to a bit.\n
-    ```cv2.INTER_AREA``` option uses resampling using pixel area relation technique. While enlarging
-    images, INTER_AREA work same as INTER_NEAREST. In other cases, ```INTER_AREA works``` better in
-    image decimation and avoiding false inference patterns in images (moire pattern).\n
-    ```cv2.INTER_CUBIC``` option uses bicubic interpolation technique. This is an extension of cubic
-    interpolation technique and is used for 2 dimension regular grid patterns.\n
-    ```cv2.INTER_LANCZOS4``` option uses Lanczos interpolation over 8 x 8 pixel neighborhood technique.
-    It uses Fourier series and Chebyshev polynomials and is suited for images with large number of
-    small size details.\n
-    ```cv2.INTER_NEAREST_EXACT ``` is a modification of INTER_NEAREST with bit level accuracy.\n
-    ```cv2.INTER_MAX ``` option uses mask for interpolation codes.\n
-    ```cv2.WARP_FILL_OUTLIERS ``` interpolation technique skips the outliers during interpolation calculations.\n
-    ```cv2.WARP_INVERSE_MAP ``` option uses inverse transformation technique for interpolation.\n""")
-            cols_tab1[0].link_button("📚", "https://iq.opengenus.org/different-interpolation-methods-in-opencv/")
-            interpolation = cols_tab1[1].selectbox("Interpolation method:", list(dict_interpolation.keys()))
-            if st.toggle("Apply", key=1):
-                try:
-                    img_wrk = cv2.resize(img_wrk, None, fx=scaling_factor, fy=scaling_factor,
-                                        interpolation=dict_interpolation[interpolation])
-                    img_processed.pyplot(get_img_fig(img_wrk))
-                    list_op.append("Resize - fx="+str(scaling_factor)+", fy="+str(scaling_factor)+ \
-                                ", interpolation="+interpolation)
-                except Exception as e:
-                    st.exception(e)
+            with tab1.form("Resize parameters"):
+                st.session_state.scaling_factor = st.slider("Scaling factor :", 0.1, 10., 1., 0.1)
+                cols_tab1 = st.columns([0.1, 0.9], gap="medium", vertical_alignment="center")
+                cols_tab1[0].markdown("💬", help="""An interpolation function’s goal is
+        to examine neighborhoods of pixels and use these neighborhoods to optically increase or decrease
+        the size of the image without introducing distortions (or at least as few distortions
+        as possible).\n
+        ```cv2.INTER_LINEAR``` This option uses the bilinear interpolation algorithm. Unlike INTER_NEAREST,
+        this does the interpolation in two dimensions and predicts the function used to calculate the color
+        of a pixel. This algorithm is effective in handling visual distortions while zooming or
+        enlarging an image.\n
+        ```cv2.INTER_NEAREST``` This option uses the nearest neighbor interpolation algorithm. It retains
+        the sharpness of the edges though the overall image may be blurred.\n
+        ```cv2.INTER_LINEAR_EXACT```is a modification of ```INTER_LINEAR``` and both uses bilinear
+        interpolation algorithm. The only difference is that the calculations in ```INTER_LINEAR_EXACT```
+        are accurate to a bit.\n
+        ```cv2.INTER_AREA``` option uses resampling using pixel area relation technique. While enlarging
+        images, INTER_AREA work same as INTER_NEAREST. In other cases, ```INTER_AREA works``` better in
+        image decimation and avoiding false inference patterns in images (moire pattern).\n
+        ```cv2.INTER_CUBIC``` option uses bicubic interpolation technique. This is an extension of cubic
+        interpolation technique and is used for 2 dimension regular grid patterns.\n
+        ```cv2.INTER_LANCZOS4``` option uses Lanczos interpolation over 8 x 8 pixel neighborhood technique.
+        It uses Fourier series and Chebyshev polynomials and is suited for images with large number of
+        small size details.\n
+        ```cv2.INTER_NEAREST_EXACT ``` is a modification of INTER_NEAREST with bit level accuracy.\n
+        ```cv2.INTER_MAX ``` option uses mask for interpolation codes.\n
+        ```cv2.WARP_FILL_OUTLIERS ``` interpolation technique skips the outliers during interpolation calculations.\n
+        ```cv2.WARP_INVERSE_MAP ``` option uses inverse transformation technique for interpolation.\n""")
+                cols_tab1[0].link_button("📚", "https://opencv.org/blog/resizing-and-rescaling-images-with-opencv/#h-resizing-with-different-interpolation-methods")
+                st.session_state.interpolation = cols_tab1[1].selectbox("Interpolation method:",
+                                                            list(dict_interpolation.keys()))
+                c1, c2 = st.columns(2)
+                apply_tab1 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                       the operation is to be carried out.", key=1)
+                with c2:
+                    submit_tab1 = st.form_submit_button(":green[Confirm]")
+
+            if submit_tab1:
+                st.session_state.resize = apply_tab1
+                print("submit ", apply_tab1)
+                st.rerun()
 
         with tab2: # Rotate
-            angle = st.slider("Angle :", 0, 360, 0, step=10)
-            if angle != 0:
-                try:
-                    img_wrk = imutils.rotate(img_wrk, angle=angle)
-                    img_processed.pyplot(get_img_fig(img_wrk))
-                    list_op.append("Rotate - angle="+str(angle))
-                except Exception as e:
-                    st.exception(e)
+            with tab2.form("Rotate parameters"):
+                st.session_state.angle = st.slider("Angle :", 0, 360, 0, step=10)
+                c1, c2 = st.columns(2)
+                apply_tab2 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                       the operation is to be carried out.", key=2)
+                with c2:
+                    submit_tab2 = st.form_submit_button(":green[Confirm]")
+
+            if submit_tab2:
+                st.session_state.rotate = apply_tab2
+                st.rerun()
 
         with tab3: # Filtering
             st.write("📚 :blue[*More about image filtering*]  👉  \
@@ -291,29 +464,37 @@ if image_file is not None:
                                             selection_mode="single")
             match selection:
                 case "Custom 2D Convolution":
+                    with st.form("tab3_1"):
                         st.write("📚 :blue[*More about convolution matrix*]  👉  \
                                     [here](https://en.wikipedia.org/wiki/Kernel_(image_processing))")
                         text_convol = st.text_input("Write your custom kernel here (example : 1/9 * [[1,1,1], [1,1,1], [1,1,1]]):",
                                                     value=None)
+                        kernel = None
                         if text_convol is not None:
                             try:
                                 text_coeff, list_kernel, latex_code = text_kernel_to_latex(text_convol)
                                 coeff = eval_expr(text_coeff)
                                 kernel = coeff * np.array(list_kernel)
-                                st.latex(latex_code)
+                                show_latex(latex_code)
                             except Exception as e:
                                 st.exception(e)
                                 text_convol = None
-                            try:
-                                img_wrk = cv2.filter2D(src=img_wrk, ddepth=-1, kernel=kernel)
-                                img_processed.pyplot(get_img_fig(img_wrk))
-                                list_op.append("Filtering - Custom 2D Convolution - kernel="+ text_convol)
-                            except Exception as e:
-                                st.exception(e)
                         else:
                             text_coeff, list_kernel, latex_code = \
                                         text_kernel_to_latex("1/9 * [[1,1,1], [1,1,1], [1,1,1]]")
-                            st.latex(latex_code)
+                            show_latex(latex_code)
+
+                        c1, c2 = st.columns(2)
+                        apply_tab31 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                the operation is to be carried out.", key=3)
+                        with c2:
+                            submit_tab31 = st.form_submit_button(":green[Confirm]")
+
+                    if submit_tab31:
+                        st.session_state.convolution = apply_tab31
+                        st.session_state.text_convol = text_convol
+                        st.session_state.convol_kernel = kernel
+                        st.rerun()
 
                 case "Blurring":
                     st.write("📚 :blue[*More about blurring techniques*]  👉  \
@@ -321,319 +502,353 @@ if image_file is not None:
                     typ_blurring = st.segmented_control("Bluring type",
                                         ["Averaging", "Gaussian Blurring", "Median Blurring",
                                         "Bilateral Filtering"],
-                                        selection_mode="single")
-                    match typ_blurring:
-                        case "Averaging":
-                                st.markdown("💬 :green[Averaging?]",
+                                        selection_mode="multi")
+
+                    if "Averaging" in typ_blurring:
+                        with st.form("tab_32a"):
+                            st.markdown("💬 :green[Averaging?]",
                                             help="This is done by convolving an image with a normalized box filter.\
                                         It simply takes the average of all the pixels under the kernel \
                                         area and replaces the central element."
                                            )
-                                kernel_width = st.slider("Kernel size width:", 2, 20, None, 1)
-                                kernel_height = st.slider("Kernel size height:", 2, 20, None, 1)
-                                if st.toggle("Apply", key=2):
-                                    kernel_size = (kernel_width, kernel_height)
-                                    try:
-                                        img_wrk = cv2.blur(src=img_wrk, ksize=kernel_size)
-                                        img_processed.pyplot(get_img_fig(img_wrk))
-                                        list_op.append("Filtering - Averaging - kernel_size="+str(kernel_size))
-                                    except Exception as e:
-                                        st.exception(e)
+                            kernel_width = st.slider("Kernel size width:", 2, 20, None, 1)
+                            kernel_height = st.slider("Kernel size height:", 2, 20, None, 1)
 
-                        case "Gaussian Blurring":
+                            c1, c2 = st.columns(2)
+                            apply_tab32a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                    the operation is to be carried out.", key=4)
+                            with c2:
+                                submit_tab32a = st.form_submit_button(":green[Confirm]")
+
+                        if submit_tab32a:
+                            st.session_state.averaging = apply_tab32a
+                            st.session_state.averaging_kernel_size = (kernel_width, kernel_height)
+                            st.rerun()
+
+                    if "Gaussian Blurring" in typ_blurring:
+                        with st.form("tab_32b"):
                             st.markdown("💬 :green[Gaussian Blurringing?]",
-                                            help="In this method, instead of a box filter, a Gaussian kernel is used. \
-We should specify the width and height of the kernel which should be positive and odd. \
-We also should specify the standard deviation in the X and Y directions, `sigmaX` and `sigmaY` respectively. \
-If only `sigmaX` is specified, `sigmaY` is taken as the same as sigmaX. If both are given as zeros, they are \
-calculated from the kernel size.\n \
-Gaussian blurring is highly effective in removing Gaussian noise from an image.")
+                                                help="In this method, instead of a box filter, a Gaussian kernel is used. \
+    We should specify the width and height of the kernel which should be positive and odd. \
+    We also should specify the standard deviation in the X and Y directions, `sigmaX` and `sigmaY` respectively. \
+    If only `sigmaX` is specified, `sigmaY` is taken as the same as sigmaX. If both are given as zeros, they are \
+    calculated from the kernel size.\n \
+    Gaussian blurring is highly effective in removing Gaussian noise from an image.")
                             kernel_width = st.slider("Kernel size width:", 2, 20, None, 1,)
                             kernel_height = st.slider("Kernel size height:", 2, 20, None, 1)
                             st.markdown("Standard deviations of the Gaussian kernel:",
                                         help="""The parameters `sigmaX` and `sigmaY` represent the standard deviations
-                                                of the Gaussian kernel in the horizontal (X) and vertical (Y) directions,
-                                                respectively. These values control the extent of blurring applied to the image.​\n
-**Typical Values for sigmaX and sigmaY:**
-- Low values (e.g., 1–3): Apply a mild blur, useful for slight noise reduction while preserving image details.​
-- Moderate values (e.g., 5–10): Produce a more noticeable blur, helpful for reducing more significant noise or smoothing out textures.
-- High values (e.g., >10): Result in a strong blur, which can be used for artistic effects or to obscure details.​
-It's common practice to set sigmaX and sigmaY to 0. In this case, OpenCV calculates the standard deviations based on the kernel size (ksize).
-If only sigmaX is specified and sigmaY is set to 0, OpenCV uses the same value for both directions. ​\n
-**Recommendations:**
-- Specify sigmaX and sigmaY explicitly: For precise control over the blurring effect, define both parameters based on the desired outcome.​
-- Use sigmaX = 0 and sigmaY = 0: To allow OpenCV to compute the standard deviations automatically from the kernel size.​
-- Choose an appropriate kernel size: The ksize parameter should be a tuple of positive odd integers (e.g., (3, 3), (5, 5)).
-                    """)
+                                                    of the Gaussian kernel in the horizontal (X) and vertical (Y) directions,
+                                                    respectively. These values control the extent of blurring applied to the image.​\n
+    **Typical Values for sigmaX and sigmaY:**
+    - Low values (e.g., 1–3): Apply a mild blur, useful for slight noise reduction while preserving image details.​
+    - Moderate values (e.g., 5–10): Produce a more noticeable blur, helpful for reducing more significant noise or smoothing out textures.
+    - High values (e.g., >10): Result in a strong blur, which can be used for artistic effects or to obscure details.​
+    It's common practice to set sigmaX and sigmaY to 0. In this case, OpenCV calculates the standard deviations based on the kernel size (ksize).
+    If only sigmaX is specified and sigmaY is set to 0, OpenCV uses the same value for both directions. ​\n
+    **Recommendations:**
+    - Specify sigmaX and sigmaY explicitly: For precise control over the blurring effect, define both parameters based on the desired outcome.​
+    - Use sigmaX = 0 and sigmaY = 0: To allow OpenCV to compute the standard deviations automatically from the kernel size.​
+    - Choose an appropriate kernel size: The ksize parameter should be a tuple of positive odd integers (e.g., (3, 3), (5, 5)).
+                        """)
                             sigmaX = st.slider("sigmaX:", 0, 20, 0, 1)
                             sigmaY = st.slider("sigmaY:", 0, 20, 0, 1)
-                            if st.toggle("Apply", key=3):
-                                kernel_size = (kernel_width, kernel_height)
-                                try:
-                                    img_wrk = cv2.GaussianBlur(src=img_wrk, ksize=kernel_size, \
-                                                               sigmaX=sigmaX, sigmaY=sigmaY)
-                                    img_processed.pyplot(get_img_fig(img_wrk))
-                                    list_op.append("Filtering - Gaussian Blurring - ksize="+ \
-                                                   str(kernel_size)+", sigmaX="+str(sigmaX)+ \
-                                                    ", sigmaY="+str(sigmaY))
-                                except Exception as e:
-                                    st.exception(e)
 
-                        case "Median Blurring":
+                            c1, c2 = st.columns(2)
+                            apply_tab32b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                    the operation is to be carried out.", key=5)
+                            with c2:
+                                submit_tab32b = st.form_submit_button(":green[Confirm]")
+
+                        if submit_tab32b:
+                            st.session_state.gaussian_bluring = apply_tab32b
+                            st.session_state.gb_kernel_size = (kernel_width, kernel_height)
+                            st.session_state.sigmaX = sigmaX
+                            st.session_state.sigmaY = sigmaY
+                            st.rerun()
+
+                    if "Median Blurring" in typ_blurring:
+                        with st.form("tab_32c"):
                             st.markdown("💬 :green[Median Blurring?]",
-                                        help="It takes the median of all the pixels under the \
-kernel area and the central element is replaced with this median value.  Interestingly, in the above \
-filters, the central element is a newly calculated value which may be a pixel value in the image or a new value. \
-But in median blurring, the central element is always replaced by some pixel value in the image. \
-It reduces the noise effectively. Its kernel size should be a positive odd integer.\n \
-Median blurring is highly effective against salt-and-pepper noise in an image.")
+                                            help="It takes the median of all the pixels under the \
+    kernel area and the central element is replaced with this median value.  Interestingly, in the above \
+    filters, the central element is a newly calculated value which may be a pixel value in the image or a new value. \
+    But in median blurring, the central element is always replaced by some pixel value in the image. \
+    It reduces the noise effectively. Its kernel size should be a positive odd integer.\n \
+    Median blurring is highly effective against salt-and-pepper noise in an image.")
                             kernel_size = st.slider("Kernel size:", 3, 15, None, 2, key=101)
-                            if st.toggle("Apply", key=4):
-                                try:
-                                    img_wrk = cv2.medianBlur(img_wrk, kernel_size)
-                                    img_processed.pyplot(get_img_fig(img_wrk))
-                                    list_op.append("Filtering - Median Blurring - kernel_size="+ \
-                                                   str(kernel_size))
-                                except Exception as e:
-                                    st.exception(e)
 
-                        case "Bilateral Filtering":
+                            c1, c2 = st.columns(2)
+                            apply_tab32c = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                    the operation is to be carried out.", key=6)
+                            with c2:
+                                submit_tab32c = st.form_submit_button(":green[Confirm]")
+
+                        if submit_tab32c:
+                            st.session_state.median_bluring = apply_tab32c
+                            st.session_state.mb_kernel_size = kernel_size
+                            st.rerun()
+
+                    if "Bilateral Filtering" in typ_blurring:
+                        with st.form("tab_32d"):
                             st.markdown("💬 :green[Bilateral Filtering?]",
                                         help="It is highly effective in noise removal while \
-keeping edges sharp. But the operation is slower compared to other filters. We already saw that a \
-Gaussian filter takes the neighbourhood around the pixel and finds its Gaussian weighted average. \
-This Gaussian filter is a function of space alone, that is, nearby pixels are considered while \
-filtering. It doesn't consider whether pixels have almost the same intensity. It doesn't consider \
-whether a pixel is an edge pixel or not. So it blurs the edges also, which we don't want to do.\n \
-Bilateral filtering also takes a Gaussian filter in space, but one more Gaussian filter which is \
-a function of pixel difference. \
-The Gaussian function of space makes sure that only nearby pixels are considered for blurring, \
-while the Gaussian function of intensity difference makes sure that only those pixels with similar \
-intensities to the central pixel are considered for blurring. \
-So it preserves the edges since pixels at edges will have large intensity variation.")
+    keeping edges sharp. But the operation is slower compared to other filters. We already saw that a \
+    Gaussian filter takes the neighbourhood around the pixel and finds its Gaussian weighted average. \
+    This Gaussian filter is a function of space alone, that is, nearby pixels are considered while \
+    filtering. It doesn't consider whether pixels have almost the same intensity. It doesn't consider \
+    whether a pixel is an edge pixel or not. So it blurs the edges also, which we don't want to do.\n \
+    Bilateral filtering also takes a Gaussian filter in space, but one more Gaussian filter which is \
+    a function of pixel difference. \
+    The Gaussian function of space makes sure that only nearby pixels are considered for blurring, \
+    while the Gaussian function of intensity difference makes sure that only those pixels with similar \
+    intensities to the central pixel are considered for blurring. \
+    So it preserves the edges since pixels at edges will have large intensity variation.")
                             st.markdown("Diameter of each pixel neighborhood that is used during filtering:",
                                         help=""" **Effect:**\n
-A larger `d` value means that more neighboring pixels are considered in the filtering process, leading to a more pronounced
-blurring effect. Conversely, a smaller `d` focuses the filter on a tighter area, preserving more details.​
-**Automatic Calculation:**\n
-If `d` is set to a non-positive value (e.g., 0 or negative), OpenCV automatically calculates it based on the sigmaSpace parameter.
-Specifically, the radius is computed as `radius = cvRound(sigmaSpace * 1.5)`, and then `d = radius * 2 + 1` to ensure it's an odd
-number. This ensures that the kernel has a central pixel. ​
-**Typical Values for `d`:**\n
-The choice of d depends on the desired balance between noise reduction and edge preservation:​
-- Small d (e.g., 5 to 9): Suitable for subtle smoothing while maintaining edge sharpness.​
-- Medium d (e.g., 9 to 15): Offers a balance between noise reduction and detail preservation.​
-- Large d (e.g., 15 and above): Provides stronger blurring, which may be useful for artistic effects but can lead to loss of
-fine details.​
-**Recommendations:**\n
-- Large filters (d > 5) are very slow, so it is recommended to use `d=5` for real-time applications, and perhaps
-`d=9` for offline applications that need heavy noise filtering.
-- Start with Moderate Values: Begin with `d=9`, `sigmaColor=75`, and `sigmaSpace=75` as a baseline. Adjust these values based on
-the specific requirements of your application.​
-- Consider Image Size: For larger images, you might need to increase `d` to achieve a noticeable effect. Conversely,
-for smaller images, a smaller `d` might suffice.​
-- Balance with `sigmaColor` and `sigmaSpace`: Ensure that `d` is appropriately balanced with `sigmaColor` and
-`sigmaSpace`. An excessively large `sigmaSpace` with a small `d` might not utilize the full potential of the spatial filtering.
-                                            """)
+    A larger `d` value means that more neighboring pixels are considered in the filtering process, leading to a more pronounced
+    blurring effect. Conversely, a smaller `d` focuses the filter on a tighter area, preserving more details.​
+    **Automatic Calculation:**\n
+    If `d` is set to a non-positive value (e.g., 0 or negative), OpenCV automatically calculates it based on the sigmaSpace parameter.
+    Specifically, the radius is computed as `radius = cvRound(sigmaSpace * 1.5)`, and then `d = radius * 2 + 1` to ensure it's an odd
+    number. This ensures that the kernel has a central pixel. ​
+    **Typical Values for `d`:**\n
+    The choice of d depends on the desired balance between noise reduction and edge preservation:​
+    - Small d (e.g., 5 to 9): Suitable for subtle smoothing while maintaining edge sharpness.​
+    - Medium d (e.g., 9 to 15): Offers a balance between noise reduction and detail preservation.​
+    - Large d (e.g., 15 and above): Provides stronger blurring, which may be useful for artistic effects but can lead to loss of
+    fine details.​
+    **Recommendations:**\n
+    - Large filters (d > 5) are very slow, so it is recommended to use `d=5` for real-time applications, and perhaps
+    `d=9` for offline applications that need heavy noise filtering.
+    - Start with Moderate Values: Begin with `d=9`, `sigmaColor=75`, and `sigmaSpace=75` as a baseline. Adjust these values based on
+    the specific requirements of your application.​
+    - Consider Image Size: For larger images, you might need to increase `d` to achieve a noticeable effect. Conversely,
+    for smaller images, a smaller `d` might suffice.​
+    - Balance with `sigmaColor` and `sigmaSpace`: Ensure that `d` is appropriately balanced with `sigmaColor` and
+    `sigmaSpace`. An excessively large `sigmaSpace` with a small `d` might not utilize the full potential of the spatial filtering.
+                                                """)
                             d_value = st.slider("d:", 3, 15, None, 2)
                             st.markdown("`sigmaColor` and `sigmaSpace`:", help="""
-`sigmaColor`: This parameter defines the filter sigma in the color space. A larger value means that pixels with more significant
-color differences will be mixed together, resulting in areas of semi-equal color.​
-`sigmaSpace`: This parameter defines the filter sigma in the coordinate space. A larger value means that pixels farther apart
-will influence each other as long as their colors are close enough.​\n
-These parameters work together to ensure that the filter smooths the image while preserving edges.​
-**Typical Values for `sigmaColor` and `sigmaSpace`:**\n
-The choice of `sigmaColor` and `sigmaSpace` depends on the specific application and the desired effect.
-However, some commonly used values are:​
-- `sigmaColor`: Values around 75 are often used for general smoothing while preserving edges.​
-- `sigmaSpace`: Similarly, values around 75 are typical for maintaining edge sharpness while reducing noise.​
-For example, applying the bilateral filter with `d=9`, `sigmaColor=75`, and `sigmaSpace=75` is a common practice.
-**Recommendations:**`\n
-- Start with Equal Values: Setting `sigmaColor` and `sigmaSpace` to the same value (e.g., 75) is a good starting point.​
-- Adjust Based on Results: If the image appears too blurred, reduce the values. If noise is still present, increase them.​
-- Consider Image Characteristics: For images with high noise, higher values may be necessary. For images where edge preservation
-is critical, lower values are preferable.""")
+    `sigmaColor`: This parameter defines the filter sigma in the color space. A larger value means that pixels with more significant
+    color differences will be mixed together, resulting in areas of semi-equal color.​
+    `sigmaSpace`: This parameter defines the filter sigma in the coordinate space. A larger value means that pixels farther apart
+    will influence each other as long as their colors are close enough.​\n
+    These parameters work together to ensure that the filter smooths the image while preserving edges.​
+    **Typical Values for `sigmaColor` and `sigmaSpace`:**\n
+    The choice of `sigmaColor` and `sigmaSpace` depends on the specific application and the desired effect.
+    However, some commonly used values are:​
+    - `sigmaColor`: Values around 75 are often used for general smoothing while preserving edges.​
+    - `sigmaSpace`: Similarly, values around 75 are typical for maintaining edge sharpness while reducing noise.​
+    For example, applying the bilateral filter with `d=9`, `sigmaColor=75`, and `sigmaSpace=75` is a common practice.
+    **Recommendations:**`\n
+    - Start with Equal Values: Setting `sigmaColor` and `sigmaSpace` to the same value (e.g., 75) is a good starting point.​
+    - Adjust Based on Results: If the image appears too blurred, reduce the values. If noise is still present, increase them.​
+    - Consider Image Characteristics: For images with high noise, higher values may be necessary. For images where edge preservation
+    is critical, lower values are preferable.""")
                             sigma_color = st.slider("sigmaColor", 1, 255, None, 1)
                             sigma_space = st.slider("sigmaSpace", 1, 255, None, 1)
-                            if st.toggle("Apply", key=5):
-                                try:
-                                    img_wrk = cv.bilateralFilter(img_wrk, d, sigma_color, sigma_space)
-                                    img_processed.pyplot(get_img_fig(img_wrk))
-                                    list_op.append("Filtering - Bilateral Filtering - d="+ \
-                                                  str(d)+", sigma_color="+str(sigma_color)+ \
-                                                  ", sigma_space="+str(sigma_space))
-                                except Exception as e:
-                                    st.exception(e)
+
+                            c1, c2 = st.columns(2)
+                            apply_tab32d = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                    the operation is to be carried out.", key=7)
+                            with c2:
+                                submit_tab32d = st.form_submit_button(":green[Confirm]")
+
+                        if submit_tab32d:
+                            st.session_state.bilateral_filtering = apply_tab32d
+                            st.session_state.d = d_value
+                            st.session_state.sigma_color = sigma_color
+                            st.session_state.sigma_space = sigma_space
+                            st.rerun()
 
         with tab4: # Morphologie
             list_select = st.segmented_control("Morphological operation:",
                                               ["Erosion", 'Dilation'],
                                               selection_mode="multi")
             if "Erosion" in list_select:
-                st.markdown("💬 :green[Erosion?]",
-                                help="The basic idea of erosion is just like soil erosion only, it erodes \
-away the boundaries of foreground object (Always try to keep foreground in white). \
-So what it does? The kernel slides through the image (as in 2D convolution). A pixel in the \
-original image (either 1 or 0) will be considered 1 only if all the pixels under the kernel is 1, \
-otherwise it is eroded (made to zero). \n \
-So what happends is that, all the pixels near boundary will be discarded depending upon the \
-size of kernel. So the thickness or size of the foreground object decreases or simply white region \
-decreases in the image. \n\
-It is useful for removing small white noises, detach two connected objects etc. \n \
-:orange[**Best practice :** convert to grayscale before apply erosion.]​")
-                kernel_size_ero = st.slider("Kernel size:", 3, 21, 3, 2, key=102)
-                nb_iter = st.slider('Iterations number:', 1, 7, 1, 1, key=201)
-                kernel = np.ones((kernel_size_ero,kernel_size_ero),np.uint8)
-                erosion = cv2.erode(img_wrk, kernel, iterations=nb_iter)
-                if st.toggle("Apply", key=8):
-                    try:
-                        img_wrk = cv2.erode(img_wrk, kernel, iterations=nb_iter)
-                        img_processed.pyplot(get_img_fig(img_wrk))
-                        list_op.append("Erosion - kernel_size="+str(kernel_size_ero)+ \
-                                    ", iterations="+str(nb_iter))
-                    except Exception as e:
-                        st.exception(e)
+                with st.form("tab_4a"):
+                    st.markdown("💬 :green[Erosion?]",
+                                    help="The basic idea of erosion is just like soil erosion only, it erodes \
+    away the boundaries of foreground object (Always try to keep foreground in white). \
+    So what it does? The kernel slides through the image (as in 2D convolution). A pixel in the \
+    original image (either 1 or 0) will be considered 1 only if all the pixels under the kernel is 1, \
+    otherwise it is eroded (made to zero). \n \
+    So what happends is that, all the pixels near boundary will be discarded depending upon the \
+    size of kernel. So the thickness or size of the foreground object decreases or simply white region \
+    decreases in the image. \n\
+    It is useful for removing small white noises, detach two connected objects etc. \n \
+    :orange[**Best practice :** convert to grayscale before apply erosion.]​")
+                    kernel_size_ero = st.slider("Kernel size:", 3, 21, 3, 2, key=102)
+                    nb_iter = st.slider('Iterations number:', 1, 7, 1, 1, key=201)
+
+                    c1, c2 = st.columns(2)
+                    apply_tab4a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                            the operation is to be carried out.", key=8)
+                    with c2:
+                        submit_tab4a = st.form_submit_button(":green[Confirm]")
+
+                if submit_tab4a:
+                    st.session_state.erosion = apply_tab4a
+                    st.session_state.erosion_kernel_size = kernel_size_ero
+                    st.session_state.nb_iter_erosion = nb_iter
+                    st.rerun()
 
             if "Dilation" in list_select:
-                st.markdown("💬 :green[Dilation?]",
-                                help="The opposite of an erosion is a dilation. Just like an \
-erosion will eat away at the foreground pixels, a dilation will grow the foreground pixels. \
-Dilations increase the size of foreground objects and are especially useful for joining broken \
-parts of an image together. Dilations, just as an erosion, also utilize structuring elements \
-— a center pixel p of the structuring element is set to white if ANY pixel in the structuring \
-element is > 0. \n \
-:orange[**Best practice :** convert to grayscale before apply dilation.]​")
-                kernel_size_dil = st.slider("Kernel size:", 3, 21, 3, 2, key=103)
-                nb_iter = st.slider('Iterations number:', 1, 7, 1, 1, key=202)
-                kernel = np.ones((kernel_size_dil,kernel_size_dil),np.uint8)
-                erosion = cv2.dilate(img_wrk, kernel, iterations=nb_iter)
-                if st.toggle("Apply", key=9):
-                    try:
-                        img_wrk = cv2.erode(img_wrk, kernel, iterations=nb_iter)
-                        img_processed.pyplot(get_img_fig(img_wrk))
-                        list_op.append("Erosion - kernel_size="+str(kernel_size_dil)+ \
-                                       ", iterations="+str(nb_iter))
-                    except Exception as e:
-                        st.exception(e)
+                with st.form("tab_4b"):
+                    st.markdown("💬 :green[Dilation?]",
+                                    help="The opposite of an erosion is a dilation. Just like an \
+    erosion will eat away at the foreground pixels, a dilation will grow the foreground pixels. \
+    Dilations increase the size of foreground objects and are especially useful for joining broken \
+    parts of an image together. Dilations, just as an erosion, also utilize structuring elements \
+    — a center pixel p of the structuring element is set to white if ANY pixel in the structuring \
+    element is > 0. \n \
+    :orange[**Best practice :** convert to grayscale before apply dilation.]​")
+                    kernel_size_dil = st.slider("Kernel size:", 3, 21, 3, 2, key=103)
+                    nb_iter = st.slider('Iterations number:', 1, 7, 1, 1, key=202)
+                    kernel = np.ones((kernel_size_dil,kernel_size_dil),np.uint8)
+
+                    c1, c2 = st.columns(2)
+                    apply_tab4b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                            the operation is to be carried out.", key=9)
+                    with c2:
+                        submit_tab4b = st.form_submit_button(":green[Confirm]")
+
+                if submit_tab4b:
+                    st.session_state.dilation = apply_tab4b
+                    st.session_state.dilation_kernel_size = kernel_size_dil
+                    st.session_state.nb_iter_dilation = nb_iter
+                    st.rerun()
 
         with tab5: # Thresholding
             selection = st.segmented_control("Type:", ["Binarization", "Adaptative thresholding"])
             match selection:
                 case "Binarization":
-                    st.markdown("💬 :green[What is thresholding?]",
-                                help='''Thresholding is the binarization of an image. In general, we seek to
-                                        convert a grayscale image to a binary image, where the pixels are either
-                                        0 or 255.
-                                        A simple thresholding example would be selecting a threshold value T,
-                                        and then setting all pixel intensities less than T to 0, and all pixel
-                                        values greater than T to 255. In this way, we are able to create a binary
-                                        representation of the image.''')
-                    st.markdown("*:orange[⚠ Image must be in gray scale]*")
-                    cols_tab1 = st.columns([0.1, 0.9], gap="medium", vertical_alignment="center")
-                    with cols_tab1[1]:
-                        thresholding_type = cols_tab1[1].selectbox("Thresholding type:",
-                                                                list(dict_thresholding_type.keys()))
-                        with cols_tab1[0].popover(":material/info:", help="Help on thresholding type",
-                                                use_container_width=False):
-                            st.link_button("📚:blue[cf. OpenCV documentation :]",
-                                        "https://docs.opencv.org/3.0-beta/modules/imgproc/doc/miscellaneous_transformations.html#threshold")
+                    with st.form("tab5_a"):
+                        st.markdown("💬 :green[What is thresholding?]",
+                                    help='''Thresholding is the binarization of an image. In general, we seek to
+                                            convert a grayscale image to a binary image, where the pixels are either
+                                            0 or 255.
+                                            A simple thresholding example would be selecting a threshold value T,
+                                            and then setting all pixel intensities less than T to 0, and all pixel
+                                            values greater than T to 255. In this way, we are able to create a binary
+                                            representation of the image.''')
+                        st.markdown("*:orange[⚠ Image must be in gray scale]*")
+                        cols_tab1 = st.columns([0.1, 0.9], gap="medium", vertical_alignment="center")
+                        with cols_tab1[1]:
+                            thresholding_type = cols_tab1[1].selectbox("Thresholding type:",
+                                                                    list(dict_thresholding_type.keys()))
+                            with cols_tab1[0].popover(":material/info:", help="Help on thresholding type",
+                                                    use_container_width=False):
+                                st.link_button("📚:blue[cf. OpenCV documentation :]",
+                                            "https://docs.opencv.org/3.0-beta/modules/imgproc/doc/miscellaneous_transformations.html#threshold")
 
-                    thresh = st.slider("Thresh :", 0, 255, 255, 1)
-                    if thresholding_type in ["cv.THRESH_BINARY", "cv.THRESH_BINARY_INV"]:
-                        value = st.slider("Value :", 0, 255, 255, 1)
-                    else:
-                        value = 255
+                        thresh = st.slider("Thresh :", 0, 255, 255, 1)
+                        if thresholding_type in ["cv.THRESH_BINARY", "cv.THRESH_BINARY_INV"]:
+                            value = st.slider("Value :", 0, 255, 255, 1)
+                        else:
+                            value = 255
 
-                    cols_tab3 = st.columns(2, gap="medium", vertical_alignment="center")
-                    otsu = cols_tab3[0].checkbox("Optimum Global Thresholding using Otsu’s Method?",
-                                                help='''Otsu’s method tries to find a threshold value
-                                                    which minimizes the weighted within-class variance.
-                                                    Since Variance is the spread of the distribution
-                                                        about the mean. Thus, minimizing the within-class
-                                                        variance will tend to make the classes compact.''')
-                    cols_tab3[1].link_button("📚:blue[Documentation]",
-                                            "https://theailearner.com/2019/07/19/optimum-global-thresholding-using-otsus-method/")
+                        cols_tab3 = st.columns(2, gap="medium", vertical_alignment="center")
+                        otsu = cols_tab3[0].checkbox("Optimum Global Thresholding using Otsu’s Method?",
+                                                    help='''Otsu’s method tries to find a threshold value
+                                                        which minimizes the weighted within-class variance.
+                                                        Since Variance is the spread of the distribution
+                                                            about the mean. Thus, minimizing the within-class
+                                                            variance will tend to make the classes compact.''')
+                        cols_tab3[1].link_button("📚:blue[Documentation]",
+                                                "https://theailearner.com/2019/07/19/optimum-global-thresholding-using-otsus-method/")
 
-                    thresh_typ = dict_thresholding_type[thresholding_type]
-                    if st.toggle("Apply", key=6):
+                        thresh_typ = dict_thresholding_type[thresholding_type]
+
+                        c1, c2 = st.columns(2)
+                        apply_tab5a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                the operation is to be carried out.", key=9)
+                        with c2:
+                            submit_tab5a = st.form_submit_button(":green[Confirm]")
+
+                    if submit_tab5a:
                         if otsu:
                             thresh_typ = thresh_typ+cv2.THRESH_OTSU
-                        try:
-                            ret, img_wrk = cv2.threshold(img_wrk, thresh, value, \
-                                                        dict_thresholding_type[thresholding_type])
-                            img_processed.pyplot(get_img_fig(img_wrk))
-                            list_op.append("Thresholding - thresh="+str(tresh)+", maxval="+str(value)+ \
-                                        ", type="+thresh_typ+", otsu="+str(otsu))
-                        except Exception as e:
-                            st.exception(e)
+                        st.session_state.binarization = apply_tab5a
+                        st.session_state.bin_thresh = thresh
+                        st.session_state.bin_value = value
+                        st.session_state.bin_thresholding_type = thresholding_type
+                        st.session_state.bin_otsu = otsu
+                        st.session_state.thresh_typ = thresh_typ
+                        st.rerun()
 
                 case "Adaptative thresholding":
-                    st.markdown("💬 :green[What is adaptative thresholding?]",
-                                        help='''This is a usefull technique when dealing with images having non-uniform illumination.
-                                        In this, the threshold value is calculated separately for each pixel using
-                                        some statistics obtained from its neighborhood. This way we will get different thresholds
-                                        for different image regions and thus tackles the problem of varying illumination.''')
-                    st.markdown("*:orange[⚠ Image must be in gray scale]*")
-                    thresholding_type = st.selectbox("Thresholding type:",
-                                                    list(dict_thresholding_type.keys())[:2])
-                    max_value = st.slider("Max value :", 0, 255, 255, 1,
-                                        help="""This is the value assigned to the pixels after thresholding.
-                                            This depends on the thresholding type. If the type is cv2.THRESH_BINARY,
-                                            all the pixels greater than the threshold are assigned this maxValue.""")
-                    adaptative_method = st.selectbox("Adaptative method:",
-                                                    list(dict_adaptative_method.keys()),
-                                                    help="""This tells us how the threshold is calculated from the pixel neighborhood.
-            This currently supports two methods:
-            - cv2.ADAPTIVE_THRESH_MEAN_C: In this, the threshold value is the mean of the neighborhood area.\n
-            - cv2.ADAPTIVE_THRESH_GAUSSIAN_C: In this, the threshold value is the weighted sum of the
-            neighborhood area. This uses Gaussian weights computed using getGaussiankernel() method.""")
-                    block_size = st.slider("Block size:", 3, 21, 3, 2,
-                                            help='''**🔍 What is blockSize?**\n
-            In adaptive thresholding, the threshold for each pixel is determined based on a local neighborhood around it.
-            The blockSize parameter specifies the size of this neighborhood.
-            Specifically, it defines the dimensions of the square region (of size blockSize × blockSize) centered on the pixel being processed.
-            The threshold is then calculated based on the pixel values within this region.​\n
-            **✅ Acceptable Values for blockSize**\n
-            Must be an odd integer greater than 1: This ensures that the neighborhood has a central pixel.​
-            Common choices: 3, 5, 7, 9, 11, 13, 15, etc.​
-            Even numbers are invalid: Using an even blockSize (e.g., 2, 4, 6) would result in an error because
-            there would be no central pixel in the neighborhood.​\n
-            **🎯 Impact of blockSize on Thresholding**\n
-            Smaller blockSize (e.g., 3 or 5):​\n
-            - Captures fine details and small variations in illumination.​
-            - May be more sensitive to noise.​\n
-            Larger blockSize (e.g., 15 or 21):​\n
-            - Provides smoother thresholding, reducing the effect of noise.​
-            - Might overlook small features or details.
+                    with st.form("tab5_b"):
+                        st.markdown("💬 :green[What is adaptative thresholding?]",
+                                            help='''This is a usefull technique when dealing with images having non-uniform illumination.
+                                            In this, the threshold value is calculated separately for each pixel using
+                                            some statistics obtained from its neighborhood. This way we will get different thresholds
+                                            for different image regions and thus tackles the problem of varying illumination.''')
+                        st.markdown("*:orange[⚠ Image must be in gray scale]*")
+                        thresholding_type = st.selectbox("Thresholding type:",
+                                                        list(dict_thresholding_type.keys())[:2])
+                        max_value = st.slider("Max value :", 0, 255, 255, 1,
+                                              help="""This is the value assigned to the pixels after thresholding.
+                                                This depends on the thresholding type. If the type is cv2.THRESH_BINARY,
+                                                all the pixels greater than the threshold are assigned this maxValue.""")
+                        adaptative_method = st.selectbox("Adaptative method:",
+                                                         list(dict_adaptative_method.keys()),
+                                                         help="""This tells us how the threshold is calculated from the pixel neighborhood.
+                This currently supports two methods:
+                - cv2.ADAPTIVE_THRESH_MEAN_C: In this, the threshold value is the mean of the neighborhood area.\n
+                - cv2.ADAPTIVE_THRESH_GAUSSIAN_C: In this, the threshold value is the weighted sum of the
+                neighborhood area. This uses Gaussian weights computed using getGaussiankernel() method.""")
+                        block_size = st.slider("Block size:", 3, 21, 3, 2,
+                                               help='''**🔍 What is blockSize?**\n
+                In adaptive thresholding, the threshold for each pixel is determined based on a local neighborhood around it.
+                The blockSize parameter specifies the size of this neighborhood.
+                Specifically, it defines the dimensions of the square region (of size blockSize × blockSize) centered on the pixel being processed.
+                The threshold is then calculated based on the pixel values within this region.​\n
+                **✅ Acceptable Values for blockSize**\n
+                Must be an odd integer greater than 1: This ensures that the neighborhood has a central pixel.​
+                Common choices: 3, 5, 7, 9, 11, 13, 15, etc.​
+                Even numbers are invalid: Using an even blockSize (e.g., 2, 4, 6) would result in an error because
+                there would be no central pixel in the neighborhood.​\n
+                **🎯 Impact of blockSize on Thresholding**\n
+                Smaller blockSize (e.g., 3 or 5):​\n
+                - Captures fine details and small variations in illumination.​
+                - May be more sensitive to noise.​\n
+                Larger blockSize (e.g., 15 or 21):​\n
+                - Provides smoother thresholding, reducing the effect of noise.​
+                - Might overlook small features or details.
 
-            Choosing the appropriate blockSize depends on the specific characteristics of your image and the details you wish to preserve or suppress.''')
+                Choosing the appropriate blockSize depends on the specific characteristics of your image and the details you wish to preserve or suppress.''')
+                        const = st.slider("C:", -10, 20, 0, 1,
+                                          help='''The parameter C serves as a constant subtracted from the computed mean or weighted mean of the
+                                                    neighborhood pixels. This subtraction fine-tunes the thresholding process, allowing for better control
+                                                    over the binarization outcome.
+                **🎯 Typical Values for C**
+                The optimal value for C varies depending on the image's characteristics, such as lighting conditions and noise levels. Commonly used values include:​
+                - 2 to 10: These values are often effective for standard images with moderate lighting variations.​
+                - Higher values (e.g., 15 or 20): Useful for images with significant noise or when a more aggressive thresholding is needed.​
+                - Negative values: Occasionally used to make the thresholding more lenient, capturing lighter details that might otherwise be missed.​
 
-                    const = st.slider("C:", -10, 20, 0, 1,
-                                            help='''The parameter C serves as a constant subtracted from the computed mean or weighted mean of the
-                                                neighborhood pixels. This subtraction fine-tunes the thresholding process, allowing for better control
-                                                over the binarization outcome.
-            **🎯 Typical Values for C**
-            The optimal value for C varies depending on the image's characteristics, such as lighting conditions and noise levels. Commonly used values include:​
-            - 2 to 10: These values are often effective for standard images with moderate lighting variations.​
-            - Higher values (e.g., 15 or 20): Useful for images with significant noise or when a more aggressive thresholding is needed.​
-            - Negative values: Occasionally used to make the thresholding more lenient, capturing lighter details that might otherwise be missed.​
+                It's advisable to experiment with different C values to determine the most suitable one for your specific application. ''')
 
-            It's advisable to experiment with different C values to determine the most suitable one for your specific application. ''')
+                        c1, c2 = st.columns(2)
+                        apply_tab5b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
+                                                the operation is to be carried out.", key=10)
+                        with c2:
+                            submit_tab5b = st.form_submit_button(":green[Confirm]")
 
-                    if st.toggle("Apply", key=7):
-                        try:
-                            img_wrk = cv2.adaptiveThreshold(img_wrk, max_value, dict_adaptative_method[adaptative_method],
-                                                dict_thresholding_type[thresholding_type], block_size, const)
-                            img_processed.pyplot(get_img_fig(img_wrk))
-                            maxValue, adaptiveMethod, thresholdType, blockSize, C
-                            list_op.append("Adaptative thresholding - maxValue="+str(max_value)+ \
-                                        ", adaptiveMethod="+adaptative_method+", thresholdType"+ \
-                                        ", thresholding_type="+thresholding_type+", blockSize="+ \
-                                        str(block_size)+", C="+str(const) )
-                        except Exception as e:
-                            st.exception(e)
+                    if submit_tab5b:
+                        st.session_state.adaptative_thresh = apply_tab5b
+                        st.session_state.at_max_value = max_value
+                        st.session_state.at_adaptative_method = adaptative_method
+                        st.session_state.at_thresholding_type = thresholding_type
+                        st.session_state.at_block_size = block_size
+                        st.session_state.at_const = const
+                        st.rerun()
 
-    st.write(list_op)
+
+    if col1.button("📃 :blue[List of operations]"):
+        col1.write(list_op)
 
     with col2.expander(":blue[Quick overview of OCR recognition (with PPOCR)]", expanded=True):
         with st.form("form1"):
@@ -641,23 +856,23 @@ element is > 0. \n \
             res_cnt = st.empty()
             submit_detect = st.form_submit_button("Launch overview")
 
-    ##----------- Process OCR --------------------------------------------------------------
-    if submit_detect:
-        with res_cnt, st.spinner("PPOCR initialization ..."):
-            ocr = PaddleOCR(lang=dict_lang_ppocr[key_ppocr_lang], show_log=False)
-        with res_cnt, st.spinner("OCR process ..."):
-            result = ocr.ocr(img_wrk)
-        # draw result
-        result = result[0]
-        if len(img_wrk.shape) == 3:
-            image = img_wrk.copy()
-        else:
-            image = cv2.cvtColor(img_wrk, cv2.COLOR_GRAY2RGB)
-        boxes = [line[0] for line in result]
+        ##----------- Process OCR --------------------------------------------------------------
+        if submit_detect:
+            with res_cnt, st.spinner("PPOCR initialization ..."):
+                ocr = PaddleOCR(lang=dict_lang_ppocr[key_ppocr_lang], show_log=False)
+            with res_cnt, st.spinner("OCR process ..."):
+                result = ocr.ocr(img_wrk)
+            # draw result
+            result = result[0]
+            if len(img_wrk.shape) == 3:
+                image = img_wrk.copy()
+            else:
+                image = cv2.cvtColor(img_wrk, cv2.COLOR_GRAY2RGB)
+            boxes = [line[0] for line in result]
 
-        txts = [line[1][0] for line in result]
-        print("txts:", txts)
-        scores = [line[1][1] for line in result]
-        im_show = draw_ocr(image, boxes, txts, scores, font_path='./fonts/french.ttf')
-        im_show = Image.fromarray(im_show)
-        res_cnt.image(im_show, use_container_width=True)
+            txts = [line[1][0] for line in result]
+            print("txts:", txts)
+            scores = [line[1][1] for line in result]
+            im_show = draw_ocr(image, boxes, txts, scores, font_path='./fonts/french.ttf')
+            im_show = Image.fromarray(im_show)
+            res_cnt.image(im_show, use_container_width=True)
