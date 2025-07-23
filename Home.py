@@ -12,6 +12,17 @@ st.set_page_config(
 
 # https://fonts.google.com/icons?icon.set=Material+Symbols&icon.style=Rounded&selected=Material+Symbols+Rounded:info:FILL@0;wght@400;GRAD@0;opsz@24&icon.query=info&icon.size=24&icon.color=%235f6368
 
+st.markdown("""
+        <style>
+               .block-container {
+                    padding-top: 1rem;
+                    padding-bottom: 1rem;
+                    padding-left: 1rem;
+                    padding-right: 2rem;
+                }
+        </style>
+        """, unsafe_allow_html=True)
+
 page1 = st.Page("home_page.py", title="Home", icon=":material/home:")
 page2 = st.Page("about.py", title="About", icon=":material/info:")
 page3 = st.Page("enhance.py", title="Image processing", icon=":material/edit_square:")

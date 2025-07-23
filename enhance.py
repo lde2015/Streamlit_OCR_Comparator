@@ -3,9 +3,8 @@ import cv2
 import imutils
 from paddleocr import PaddleOCR, draw_ocr
 from PIL import Image
-import PIL
+import io
 import os
-from time import sleep
 import numpy as np
 import ast
 import operator
@@ -85,7 +84,6 @@ def load_image(in_image_file):
     #    out_image_path = "img."+in_image_file.split('.')[-1]
     #else:
     #    out_image_path = "img."+in_image_file.name.split('.')[-1]
-    print("load image")
     if isinstance(in_image_file, str):
         out_image_path = "tmp_"+in_image_file
     else:
@@ -134,6 +132,7 @@ def load_image(in_image_file):
     st.session_state.at_adaptative_method = None
     st.session_state.at_block_size = None
     st.session_state.at_const = None
+    st.session_state.processed_image = None
 
     return out_image_cv2, out_image_path
 ###
@@ -219,32 +218,22 @@ st.title(''':orange[Image check and enhance for OCR task]''')
 st.write("")
 st.write("")
 st.write("")
+st.set_option("client.showErrorDetails", False)
 
 dict_lang_ppocr, dict_interpolation, dict_thresholding_type, dict_adaptative_method = initializations()
 
 cols = st.columns([0.25, 0.25, 0.5])
 cols[0].markdown("#### :orange[Choose picture:]")
 img_typ = cols[0].radio("#### :orange[Choose picture type:]", ['Upload file', 'Take a picture', 'Use a demo file'], \
-                            index=0) #, on_change=raz)
+                            index=0)
 if img_typ == 'Upload file':
-    image_file = cols[1].file_uploader("Upload a file:", type=["png","jpg","jpeg"]) #, on_change=raz)
-_ = """
+    image_file = cols[1].file_uploader("Upload a file:", type=["png","jpg","jpeg"])
+
 if img_typ == 'Take a picture':
-    image_file = cols_pict[1].camera_input("Take a picture:", on_change=raz)
+    image_file = cols[1].camera_input("Take a picture:")
 if img_typ == 'Use a demo file':
-    with st.expander('Choose a demo file:', expanded=True):
-        demo_used = st.radio('', ['File 1', 'File 2'], index=0, \
-                            horizontal=True, on_change=raz)
-        cols_demo = st.columns([1, 2])
-        cols_demo[0].markdown('###### File 1')
-        cols_demo[0].image(img_demo_1, width=150)
-        cols_demo[1].markdown('###### File 2')
-        cols_demo[1].image(img_demo_2, width=300)
-        if demo_used == 'File 1':
-            image_file = 'img_demo_1.jpg'
-        else:
-            image_file = 'img_demo_2.jpg'
-"""
+    image_file = 'img_demo_enhance.png'
+
 ##----------- Process input image -----------------------------------------------------------------
 if image_file is not None:
     img_cv2, image_path = load_image(image_file)
@@ -277,7 +266,6 @@ if image_file is not None:
     # Processed image construction
     cnt_img_wrk = col1.container(height=500, border=False)
     img_processed = cnt_img_wrk.empty()
-
     img_wrk = img_first.copy()
 
     if st.session_state.resize:
@@ -392,6 +380,7 @@ if image_file is not None:
 
     # Show image
     img_processed.pyplot(get_img_fig(img_wrk))
+    st.session_state.processed_image = img_wrk
 
     # Process
     col2.markdown('#### :orange[Check & enhance]')
@@ -402,7 +391,7 @@ if image_file is not None:
                           "Morphologie", "Thresholding"])
         with tab1: # Resize
             with tab1.form("Resize parameters"):
-                st.session_state.scaling_factor = st.slider("Scaling factor :", 0.1, 10., 1., 0.1)
+                st.session_state.scaling_factor = st.slider("Scaling factor :", 0.1, 20., 1., 0.1)
                 cols_tab1 = st.columns([0.1, 0.9], gap="medium", vertical_alignment="center")
                 cols_tab1[0].markdown("💬", help="""An interpolation function’s goal is
         to examine neighborhoods of pixels and use these neighborhoods to optically increase or decrease
@@ -433,22 +422,19 @@ if image_file is not None:
                 st.session_state.interpolation = cols_tab1[1].selectbox("Interpolation method:",
                                                             list(dict_interpolation.keys()))
                 c1, c2 = st.columns(2)
-                apply_tab1 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                       the operation is to be carried out.", key=1)
+                apply_tab1 = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=1)
                 with c2:
                     submit_tab1 = st.form_submit_button(":green[Confirm]")
 
             if submit_tab1:
                 st.session_state.resize = apply_tab1
-                print("submit ", apply_tab1)
                 st.rerun()
 
         with tab2: # Rotate
             with tab2.form("Rotate parameters"):
                 st.session_state.angle = st.slider("Angle :", 0, 360, 0, step=10)
                 c1, c2 = st.columns(2)
-                apply_tab2 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                       the operation is to be carried out.", key=2)
+                apply_tab2 = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=2)
                 with c2:
                     submit_tab2 = st.form_submit_button(":green[Confirm]")
 
@@ -485,8 +471,7 @@ if image_file is not None:
                             show_latex(latex_code)
 
                         c1, c2 = st.columns(2)
-                        apply_tab31 = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                the operation is to be carried out.", key=3)
+                        apply_tab31 = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=3)
                         with c2:
                             submit_tab31 = st.form_submit_button(":green[Confirm]")
 
@@ -499,12 +484,14 @@ if image_file is not None:
                 case "Blurring":
                     st.write("📚 :blue[*More about blurring techniques*]  👉  \
                                 [here](https://docs.opencv.org/4.x/d4/d13/tutorial_py_filtering.html)")
-                    typ_blurring = st.segmented_control("Bluring type",
-                                        ["Averaging", "Gaussian Blurring", "Median Blurring",
-                                        "Bilateral Filtering"],
-                                        selection_mode="multi")
+                    b1, b2, b3, b4 = st.tabs(["Averaging", "Gaussian Blurring", "Median Blurring",
+                                        "Bilateral Filtering"])
+#                    typ_blurring = st.segmented_control("Bluring type",
+#                                        ["Averaging", "Gaussian Blurring", "Median Blurring",
+#                                        "Bilateral Filtering"],
+#                                        selection_mode="multi")
 
-                    if "Averaging" in typ_blurring:
+                    with b1:
                         with st.form("tab_32a"):
                             st.markdown("💬 :green[Averaging?]",
                                             help="This is done by convolving an image with a normalized box filter.\
@@ -515,8 +502,7 @@ if image_file is not None:
                             kernel_height = st.slider("Kernel size height:", 2, 20, None, 1)
 
                             c1, c2 = st.columns(2)
-                            apply_tab32a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                    the operation is to be carried out.", key=4)
+                            apply_tab32a = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=4)
                             with c2:
                                 submit_tab32a = st.form_submit_button(":green[Confirm]")
 
@@ -525,7 +511,7 @@ if image_file is not None:
                             st.session_state.averaging_kernel_size = (kernel_width, kernel_height)
                             st.rerun()
 
-                    if "Gaussian Blurring" in typ_blurring:
+                    with b2:
                         with st.form("tab_32b"):
                             st.markdown("💬 :green[Gaussian Blurringing?]",
                                                 help="In this method, instead of a box filter, a Gaussian kernel is used. \
@@ -555,8 +541,7 @@ if image_file is not None:
                             sigmaY = st.slider("sigmaY:", 0, 20, 0, 1)
 
                             c1, c2 = st.columns(2)
-                            apply_tab32b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                    the operation is to be carried out.", key=5)
+                            apply_tab32b = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=5)
                             with c2:
                                 submit_tab32b = st.form_submit_button(":green[Confirm]")
 
@@ -567,7 +552,7 @@ if image_file is not None:
                             st.session_state.sigmaY = sigmaY
                             st.rerun()
 
-                    if "Median Blurring" in typ_blurring:
+                    with b3:
                         with st.form("tab_32c"):
                             st.markdown("💬 :green[Median Blurring?]",
                                             help="It takes the median of all the pixels under the \
@@ -579,8 +564,7 @@ if image_file is not None:
                             kernel_size = st.slider("Kernel size:", 3, 15, None, 2, key=101)
 
                             c1, c2 = st.columns(2)
-                            apply_tab32c = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                    the operation is to be carried out.", key=6)
+                            apply_tab32c = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=6)
                             with c2:
                                 submit_tab32c = st.form_submit_button(":green[Confirm]")
 
@@ -589,7 +573,7 @@ if image_file is not None:
                             st.session_state.mb_kernel_size = kernel_size
                             st.rerun()
 
-                    if "Bilateral Filtering" in typ_blurring:
+                    with b4:
                         with st.form("tab_32d"):
                             st.markdown("💬 :green[Bilateral Filtering?]",
                                         help="It is highly effective in noise removal while \
@@ -650,8 +634,7 @@ if image_file is not None:
                             sigma_space = st.slider("sigmaSpace", 1, 255, None, 1)
 
                             c1, c2 = st.columns(2)
-                            apply_tab32d = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                    the operation is to be carried out.", key=7)
+                            apply_tab32d = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=7)
                             with c2:
                                 submit_tab32d = st.form_submit_button(":green[Confirm]")
 
@@ -683,8 +666,7 @@ if image_file is not None:
                     nb_iter = st.slider('Iterations number:', 1, 7, 1, 1, key=201)
 
                     c1, c2 = st.columns(2)
-                    apply_tab4a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                            the operation is to be carried out.", key=8)
+                    apply_tab4a = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=8)
                     with c2:
                         submit_tab4a = st.form_submit_button(":green[Confirm]")
 
@@ -709,8 +691,7 @@ if image_file is not None:
                     kernel = np.ones((kernel_size_dil,kernel_size_dil),np.uint8)
 
                     c1, c2 = st.columns(2)
-                    apply_tab4b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                            the operation is to be carried out.", key=9)
+                    apply_tab4b = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=9)
                     with c2:
                         submit_tab4b = st.form_submit_button(":green[Confirm]")
 
@@ -762,8 +743,7 @@ if image_file is not None:
                         thresh_typ = dict_thresholding_type[thresholding_type]
 
                         c1, c2 = st.columns(2)
-                        apply_tab5a = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                the operation is to be carried out.", key=9)
+                        apply_tab5a = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=10)
                         with c2:
                             submit_tab5a = st.form_submit_button(":green[Confirm]")
 
@@ -832,8 +812,7 @@ if image_file is not None:
                 It's advisable to experiment with different C values to determine the most suitable one for your specific application. ''')
 
                         c1, c2 = st.columns(2)
-                        apply_tab5b = c1.toggle("Apply", help="Click Confirm to confirm whether or not \
-                                                the operation is to be carried out.", key=10)
+                        apply_tab5b = c1.toggle("Apply", help="Click here to indicate whether the operation should be carried out or not, then validate with Confirm.", key=11)
                         with c2:
                             submit_tab5b = st.form_submit_button(":green[Confirm]")
 
@@ -846,9 +825,27 @@ if image_file is not None:
                         st.session_state.at_const = const
                         st.rerun()
 
+    col1_a, col1_b = col1.columns(2)
+    if col1_a.button("📃 :blue[List of operations]"):
+        col1_a.write(list_op)
 
-    if col1.button("📃 :blue[List of operations]"):
-        col1.write(list_op)
+    if col1_b.button("Prepare download"):
+        if len(img_wrk.shape) == 2:
+            pil_img = Image.fromarray(img_wrk).convert("L")
+        else:
+            img_rgb = cv2.cvtColor(img_wrk, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(img_rgb)
+        img_bytes = io.BytesIO()
+        pil_img.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+        col1_b.download_button(
+            label="Download processed image",
+            data=img_bytes,
+            file_name="processed_image.png",
+            on_click="ignore",
+            icon=":material/download:",
+            mime="image/png"
+        )
 
     with col2.expander(":blue[Quick overview of OCR recognition (with PPOCR)]", expanded=True):
         with st.form("form1"):
@@ -859,7 +856,7 @@ if image_file is not None:
         ##----------- Process OCR --------------------------------------------------------------
         if submit_detect:
             with res_cnt, st.spinner("PPOCR initialization ..."):
-                ocr = PaddleOCR(lang=dict_lang_ppocr[key_ppocr_lang], show_log=False)
+                ocr = PaddleOCR(lang=dict_lang_ppocr[key_ppocr_lang]) #, show_log=False)
             with res_cnt, st.spinner("OCR process ..."):
                 result = ocr.ocr(img_wrk)
             # draw result
@@ -871,7 +868,6 @@ if image_file is not None:
             boxes = [line[0] for line in result]
 
             txts = [line[1][0] for line in result]
-            print("txts:", txts)
             scores = [line[1][1] for line in result]
             im_show = draw_ocr(image, boxes, txts, scores, font_path='./fonts/french.ttf')
             im_show = Image.fromarray(im_show)
