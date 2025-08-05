@@ -58,7 +58,7 @@ pip install Pillow
 # Get the project files from GitHub
 #------------------------------------------------------------------------
 
-repository : https://github.com/lde2015/Streamlit_OCR_Comparator/tree/main
+repository : https://github.com/laurencedewaele/Streamlit_OCR_Comparator/tree/main
 
 
 #------------------------------------------------------------------------
